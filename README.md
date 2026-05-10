@@ -1,6 +1,6 @@
-# 悦享邮箱
+# InfiniteMail（悦享邮箱）
 
-悦享邮箱是一个基于 React、Vite 和 Tailwind CSS 的悦享生态邮件工作台。项目面向悦享 e 食平台内的用户、商户、骑手与平台运营场景，提供邮箱激活、邮件收发、联系人沉淀、业务邀请函和账号设置等能力。
+InfiniteMail（悦享邮箱）是一个基于 React、Vite 和 Tailwind CSS 的悦享生态邮件工作台。项目面向悦享 e 食平台内的用户、商户、骑手与平台运营场景，提供邮箱激活、邮件收发、联系人沉淀、业务邀请函和账号设置等能力。
 
 ## 项目亮点
 
@@ -125,7 +125,7 @@ http://127.0.0.1:25500
 ```bash
 git init
 git add .
-git commit -m "初始化悦享邮箱项目"
+git commit -m "初始化 InfiniteMail 项目"
 ```
 
 等 GitHub 仓库创建好后，再添加远程地址并推送：

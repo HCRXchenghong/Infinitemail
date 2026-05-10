@@ -1,7 +1,7 @@
 {
-  "name": "yuexiang-post-office",
+  "name": "infinitemail",
   "version": "1.0.0",
-  "description": "Yuexiang Post Office standalone desktop project",
+  "description": "InfiniteMail - Yuexiang ecosystem mail workspace",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5178 --strictPort",
     "build": "vite build",
