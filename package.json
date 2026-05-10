@@ -1,0 +1,27 @@
+{
+  "name": "yuexiang-post-office",
+  "version": "1.0.0",
+  "description": "Yuexiang Post Office standalone desktop project",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5178 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4178 --strictPort"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@infinitech/contracts": "file:./packages/contracts",
+    "dompurify": "^3.4.2",
+    "lucide-react": "^1.14.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.2.4",
+    "vite": "^5.4.21"
+  }
+}

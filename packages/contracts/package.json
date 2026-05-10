@@ -1,0 +1,25 @@
+{
+  "name": "@infinitech/contracts",
+  "private": true,
+  "version": "1.0.2",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./http": {
+      "import": "./src/http.js",
+      "require": "./src/http.cjs"
+    },
+    "./identity": {
+      "import": "./src/identity.js",
+      "require": "./src/identity.cjs"
+    },
+    "./post-office": {
+      "import": "./src/post-office.js",
+      "require": "./src/post-office.cjs"
+    },
+    "./upload": {
+      "import": "./src/upload.js",
+      "require": "./src/upload.cjs"
+    }
+  }
+}
