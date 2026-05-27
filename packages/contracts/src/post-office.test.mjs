@@ -34,7 +34,12 @@ test("post office contract publishes the standalone mailbox API surface", () => 
     "important",
     "attachment",
   ]);
-  assert.ok(POST_OFFICE_MAILBOX_PROVISIONING_STATUSES.includes("active"));
+  assert.deepEqual(POST_OFFICE_MAILBOX_PROVISIONING_STATUSES, [
+    "pending_config",
+    "queued",
+    "failed",
+    "provisioned",
+  ]);
   assert.deepEqual(POST_OFFICE_SETTINGS_FIELDS, [
     "defaultSenderName",
     "signature",
@@ -49,7 +54,7 @@ test("post office contract operations expose formal request and response schemas
   assert.equal(POST_OFFICE_API_PATHS.sendMessage.requestSchema.required.includes("body"), true);
   assert.equal(POST_OFFICE_API_PATHS.createDraft.path, "/drafts");
   assert.equal(POST_OFFICE_API_PATHS.updateSettings.requestSchema.additionalProperties, false);
-  assert.equal(listPostOfficeContractOperations("messages").length, 5);
+  assert.equal(listPostOfficeContractOperations("messages").length, 6);
 });
 
 test("post office CJS bridge stays aligned with ESM exports", () => {

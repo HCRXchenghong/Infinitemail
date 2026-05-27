@@ -1,16 +1,3 @@
-const LIVE_STATE_STORAGE_KEY = "yuexiang-post-office.live.v1";
-
-const defaultLiveState = Object.freeze({
-  mailboxByAccountId: {},
-  settingsByAccountId: {},
-  localMessagesByAccountId: {},
-  conversationMetaByAccountId: {},
-});
-
-function clonePlainObject(value, fallback = {}) {
-  return value && typeof value === "object" && !Array.isArray(value) ? { ...value } : { ...fallback };
-}
-
 function readStorageArea() {
   if (typeof window === "undefined") {
     return null;
@@ -42,7 +29,7 @@ function writeString(key, value) {
     }
     storage.setItem(key, String(value));
   } catch (_error) {
-    // ignore storage write failure in prototype shell
+    // ignore storage write failure in restricted browser shells
   }
 }
 
@@ -70,31 +57,8 @@ function writeJson(key, value) {
   try {
     storage.setItem(key, JSON.stringify(value));
   } catch (_error) {
-    // ignore storage write failure in prototype shell
+    // ignore storage write failure in restricted browser shells
   }
-}
-
-function normalizeLiveState(state) {
-  const source = state && typeof state === "object" && !Array.isArray(state) ? state : {};
-  return {
-    mailboxByAccountId: clonePlainObject(source.mailboxByAccountId),
-    settingsByAccountId: clonePlainObject(source.settingsByAccountId),
-    localMessagesByAccountId: clonePlainObject(source.localMessagesByAccountId),
-    conversationMetaByAccountId: clonePlainObject(source.conversationMetaByAccountId),
-  };
-}
-
-export function readLivePostOfficeState() {
-  return normalizeLiveState(readJson(LIVE_STATE_STORAGE_KEY, defaultLiveState));
-}
-
-export function updateLivePostOfficeState(updater) {
-  const current = readLivePostOfficeState();
-  const draft = normalizeLiveState(current);
-  const next = typeof updater === "function" ? updater(draft) || draft : draft;
-  const normalized = normalizeLiveState(next);
-  writeJson(LIVE_STATE_STORAGE_KEY, normalized);
-  return normalized;
 }
 
 export function readStoredUnifiedSession() {
@@ -136,6 +100,6 @@ export function clearUnifiedSession() {
   try {
     storage.removeItem("userProfile");
   } catch (_error) {
-    // ignore storage write failure in prototype shell
+    // ignore storage write failure in restricted browser shells
   }
 }

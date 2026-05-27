@@ -173,10 +173,10 @@ const POST_OFFICE_MESSAGE_DELIVERY_STATUSES = deepFreeze([
   "received",
 ]);
 const POST_OFFICE_MAILBOX_PROVISIONING_STATUSES = deepFreeze([
-  "pending",
-  "active",
-  "recycling",
-  "reclaimed",
+  "pending_config",
+  "queued",
+  "failed",
+  "provisioned",
 ]);
 const POST_OFFICE_SETTINGS_FIELDS = deepFreeze([
   "defaultSenderName",
@@ -200,7 +200,7 @@ const PostOfficeMailboxProfileSchema = objectSchema(
       minLength: 0,
       maxLength: 32,
     }),
-    rolePrefix: stringSchema("Immutable mailbox local-part prefix derived from platform role", {
+    rolePrefix: stringSchema("Immutable mailbox local-part prefix derived from company mailbox policy", {
       minLength: 1,
       maxLength: 32,
       pattern: "^[a-z][a-z0-9-]*-$",
@@ -210,7 +210,7 @@ const PostOfficeMailboxProfileSchema = objectSchema(
       maxLength: 48,
       pattern: "^[a-z0-9-]*$",
     }),
-    email: stringSchema("Provisioned mailbox address under the platform domain", {
+    email: stringSchema("Provisioned mailbox address under the company domain", {
       minLength: 0,
       maxLength: 160,
     }),
@@ -223,10 +223,7 @@ const PostOfficeMailboxProfileSchema = objectSchema(
       POST_OFFICE_MAILBOX_PROVISIONING_STATUSES,
       "Lifecycle status of the mailbox account",
     ),
-    authMode: enumSchema(
-      ["user", "merchant", "rider"],
-      "Unified principal type currently bound to this mailbox",
-    ),
+    authMode: enumSchema(["user"], "Company user principal type currently bound to this mailbox"),
     sourceUserId: IDENTIFIER_SCHEMA,
     createdAt: nullableSchema(TIMESTAMP_SCHEMA, "Mailbox record creation time"),
     updatedAt: nullableSchema(TIMESTAMP_SCHEMA, "Mailbox record last update time"),
@@ -310,6 +307,11 @@ const PostOfficeAttachmentSchema = objectSchema(
       minLength: 1,
       maxLength: 500,
     })),
+    contentEncoding: nullableSchema(enumSchema(["base64"], "Inline attachment content encoding")),
+    contentBase64: nullableSchema(stringSchema("Inline base64 content for first-party mail relay fallback", {
+      minLength: 1,
+      maxLength: 7000000,
+    })),
   },
   ["id", "name", "type", "sizeLabel"],
   "File attachment metadata rendered inside message detail view",
@@ -380,6 +382,12 @@ const PostOfficeMessageSchema = objectSchema(
       POST_OFFICE_MESSAGE_DELIVERY_STATUSES,
       "Delivery lifecycle state",
     ),
+    acceptedAt: nullableSchema(TIMESTAMP_SCHEMA, "Downstream provider acceptance timestamp"),
+    providerMessageId: nullableSchema(IDENTIFIER_SCHEMA, "Downstream provider message id"),
+    deliveryError: nullableSchema(stringSchema("Latest delivery failure detail", {
+      minLength: 1,
+      maxLength: 500,
+    })),
     replyToMessageId: nullableSchema(IDENTIFIER_SCHEMA, "Reply/forward source message id"),
     meta: {
       type: "object",
@@ -601,6 +609,25 @@ const PostOfficeMoveMessageResponseDataSchema = objectSchema(
   "Move result payload",
 );
 
+const PostOfficeUpdateReadStateRequestSchema = objectSchema(
+  {
+    isUnread: booleanSchema("Explicit target unread state for this message"),
+  },
+  ["isUnread"],
+  "Request body for marking a message as read or unread",
+);
+
+const PostOfficeUpdateReadStateResponseDataSchema = objectSchema(
+  {
+    messageId: IDENTIFIER_SCHEMA,
+    isUnread: booleanSchema("Resulting unread state"),
+    read: booleanSchema("Resulting read state"),
+    updatedAt: TIMESTAMP_SCHEMA,
+  },
+  ["messageId", "isUnread", "read", "updatedAt"],
+  "Read state update result payload",
+);
+
 const PostOfficeSaveDraftRequestSchema = objectSchema(
   {
     draftId: nullableSchema(IDENTIFIER_SCHEMA, "Existing draft id for idempotent overwrite"),
@@ -676,7 +703,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     responseSchema: buildEnvelopeSchema(
       PostOfficeMailboxSummaryResponseDataSchema,
@@ -688,11 +715,11 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     method: "POST",
     path: "/mailboxes/activate",
     operationId: "activateMailbox",
-    summary: "Activate the caller's first mailbox under the platform-owned domain",
+    summary: "Activate the caller's first mailbox under the company-owned domain",
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     requestSchema: PostOfficeActivateMailboxRequestSchema,
     responseSchema: buildEnvelopeSchema(
@@ -709,7 +736,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     querySchema: PostOfficeListMessagesQuerySchema,
     responseSchema: buildEnvelopeSchema(
@@ -726,7 +753,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     pathParams: { messageId: POST_OFFICE_PATH_PARAM_SCHEMAS.messageId },
     responseSchema: buildEnvelopeSchema(
@@ -743,7 +770,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     requestSchema: PostOfficeSendMessageRequestSchema,
     responseSchema: buildEnvelopeSchema(
@@ -760,7 +787,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     pathParams: { messageId: POST_OFFICE_PATH_PARAM_SCHEMAS.messageId },
     requestSchema: PostOfficePatchStarRequestSchema,
@@ -786,13 +813,31 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     pathParams: { messageId: POST_OFFICE_PATH_PARAM_SCHEMAS.messageId },
     requestSchema: PostOfficeMoveMessageRequestSchema,
     responseSchema: buildEnvelopeSchema(
       PostOfficeMoveMessageResponseDataSchema,
       "Message moved",
+    ),
+  },
+  updateMessageReadState: {
+    tag: "messages",
+    method: "PATCH",
+    path: "/messages/:messageId/read",
+    operationId: "updateMessageReadState",
+    summary: "Explicitly mark a message as read or unread",
+    auth: {
+      type: "bearer",
+      tokenKinds: ["access"],
+      principalTypes: ["user"],
+    },
+    pathParams: { messageId: POST_OFFICE_PATH_PARAM_SCHEMAS.messageId },
+    requestSchema: PostOfficeUpdateReadStateRequestSchema,
+    responseSchema: buildEnvelopeSchema(
+      PostOfficeUpdateReadStateResponseDataSchema,
+      "Message read state updated",
     ),
   },
   createDraft: {
@@ -804,7 +849,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     requestSchema: PostOfficeSaveDraftRequestSchema,
     responseSchema: buildEnvelopeSchema(
@@ -821,7 +866,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     pathParams: { draftId: POST_OFFICE_PATH_PARAM_SCHEMAS.draftId },
     responseSchema: buildEnvelopeSchema(
@@ -838,7 +883,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     pathParams: { draftId: POST_OFFICE_PATH_PARAM_SCHEMAS.draftId },
     requestSchema: PostOfficeSaveDraftRequestSchema,
@@ -856,7 +901,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     responseSchema: buildEnvelopeSchema(
       PostOfficeMailboxSettingsResponseDataSchema,
@@ -872,7 +917,7 @@ const POST_OFFICE_API_PATHS = deepFreeze({
     auth: {
       type: "bearer",
       tokenKinds: ["access"],
-      principalTypes: ["user", "merchant", "rider"],
+      principalTypes: ["user"],
     },
     requestSchema: PostOfficeMailboxSettingsPatchSchema,
     responseSchema: buildEnvelopeSchema(
@@ -901,6 +946,8 @@ const POST_OFFICE_SCHEMA_COMPONENTS = deepFreeze({
   PatchMessageStarRequest: PostOfficePatchStarRequestSchema,
   MoveMessageRequest: PostOfficeMoveMessageRequestSchema,
   MoveMessageResponseData: PostOfficeMoveMessageResponseDataSchema,
+  UpdateReadStateRequest: PostOfficeUpdateReadStateRequestSchema,
+  UpdateReadStateResponseData: PostOfficeUpdateReadStateResponseDataSchema,
   SaveDraftRequest: PostOfficeSaveDraftRequestSchema,
   SaveDraftResponseData: PostOfficeSaveDraftResponseDataSchema,
   MailboxSettingsPatch: PostOfficeMailboxSettingsPatchSchema,

@@ -51,7 +51,7 @@ export function AppSidebar({ currentView, folderCounts, profile, onNavigate, onL
         <NavItem id="drafts" icon={FileText} label="草稿箱" currentView={currentView} onNavigate={onNavigate} />
         <NavItem id="trash" icon={Trash2} label="垃圾箱" currentView={currentView} onNavigate={onNavigate} />
 
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-6">生态与联系人</div>
+        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-6">联系人</div>
         <NavItem id="contacts" icon={Users} label="通讯录" currentView={currentView} onNavigate={onNavigate} />
 
         <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-6">系统</div>

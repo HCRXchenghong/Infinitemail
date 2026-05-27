@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-infinitemail}
+      POSTGRES_USER: ${POSTGRES_USER:-infinitemail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-infinitemail}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-infinitemail} -d ${POSTGRES_DB:-infinitemail}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  stalwart:
+    image: ${STALWART_IMAGE:-stalwartlabs/stalwart:v0.16}
+    restart: unless-stopped
+    profiles: ["mailserver"]
+    environment:
+      STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL:-http://localhost:8080}
+      STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN:-admin:change-this-stalwart-password}
+    volumes:
+      - stalwart-etc:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "143:143"
+      - "993:993"
+      - "8080:8080"
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_ADDR: :1666
+      USER_APP_ORIGIN: ${USER_APP_ORIGIN:-http://localhost:1788}
+      DATABASE_URL: postgres://${POSTGRES_USER:-infinitemail}:${POSTGRES_PASSWORD:-infinitemail}@postgres:5432/${POSTGRES_DB:-infinitemail}?sslmode=disable
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      MAIL_WEBHOOK_TOKEN: ${MAIL_WEBHOOK_TOKEN:-}
+      MAILBOX_CREDENTIAL_KEY: ${MAILBOX_CREDENTIAL_KEY:-}
+      STALWART_ADMIN_URL: ${STALWART_ADMIN_URL:-http://stalwart:8080}
+      INFINITEMAIL_PRODUCTION_STRICT: ${INFINITEMAIL_PRODUCTION_STRICT:-false}
+      REQUIRE_REAL_SMS: ${REQUIRE_REAL_SMS:-false}
+      REQUIRE_REAL_OAUTH: ${REQUIRE_REAL_OAUTH:-false}
+      REQUIRE_MAIL_DATA_PLANE: ${REQUIRE_MAIL_DATA_PLANE:-false}
+      REQUIRE_MAIL_WEBHOOK: ${REQUIRE_MAIL_WEBHOOK:-false}
+    volumes:
+      - api-data:/data
+    ports:
+      - "1666:1666"
+
+  user:
+    build:
+      context: .
+      dockerfile: deploy/user.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "1788:1788"
+
+  admin:
+    build:
+      context: .
+      dockerfile: deploy/admin.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "1888:1888"
+
+volumes:
+  postgres-data:
+  api-data:
+  stalwart-etc:
+  stalwart-data:

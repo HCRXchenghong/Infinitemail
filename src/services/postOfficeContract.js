@@ -71,6 +71,10 @@ export const POST_OFFICE_OPERATION_SCHEMA_NAMES = Object.freeze({
     request: assertSchemaName("MoveMessageRequest"),
     responseData: assertSchemaName("MoveMessageResponseData"),
   }),
+  updateMessageReadState: Object.freeze({
+    request: assertSchemaName("UpdateReadStateRequest"),
+    responseData: assertSchemaName("UpdateReadStateResponseData"),
+  }),
   createDraft: Object.freeze({
     request: assertSchemaName("SaveDraftRequest"),
     responseData: assertSchemaName("SaveDraftResponseData"),

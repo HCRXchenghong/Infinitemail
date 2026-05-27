@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Info, Settings, Shield } from "lucide-react";
+import { Clock3, Info, LogOut, MonitorSmartphone, RefreshCcw, Settings, Shield } from "lucide-react";
 import { usePostOffice } from "../state/PostOfficeContext";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { postOfficeApi } from "../services/postOfficeApi";
 
 function formatUpdatedAt(value) {
   const date = new Date(value || "");
@@ -13,8 +14,18 @@ function formatUpdatedAt(value) {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatSessionTime(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 export function SettingsView() {
   const { settings, profile, actions } = usePostOffice();
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [securitySessions, setSecuritySessions] = useState({ items: [], isLoading: false, errorMessage: "" });
   const [form, setForm] = useState({
     defaultSenderName: "",
     signature: "",
@@ -43,6 +54,67 @@ export function SettingsView() {
       [field]: form[field],
     });
   }
+
+  async function loadSecuritySessions() {
+    setSecuritySessions((current) => ({ ...current, isLoading: true, errorMessage: "" }));
+    try {
+      const payload = await postOfficeApi.listSecuritySessions();
+      setSecuritySessions({
+        items: Array.isArray(payload?.items) ? payload.items : [],
+        isLoading: false,
+        errorMessage: "",
+      });
+    } catch (error) {
+      setSecuritySessions((current) => ({
+        ...current,
+        isLoading: false,
+        errorMessage: error?.message || "登录设备加载失败，请稍后重试",
+      }));
+    }
+  }
+
+  async function logoutOtherSessions() {
+    setSecuritySessions((current) => ({ ...current, isLoading: true, errorMessage: "" }));
+    try {
+      const payload = await postOfficeApi.logoutOtherSecuritySessions();
+      setSecuritySessions({
+        items: Array.isArray(payload?.items) ? payload.items : [],
+        isLoading: false,
+        errorMessage: "",
+      });
+    } catch (error) {
+      setSecuritySessions((current) => ({
+        ...current,
+        isLoading: false,
+        errorMessage: error?.message || "退出其他设备失败，请稍后重试",
+      }));
+    }
+  }
+
+  async function revokeSession(sessionId) {
+    setSecuritySessions((current) => ({ ...current, isLoading: true, errorMessage: "" }));
+    try {
+      const payload = await postOfficeApi.revokeSecuritySession(sessionId);
+      setSecuritySessions({
+        items: Array.isArray(payload?.items) ? payload.items : [],
+        isLoading: false,
+        errorMessage: "",
+      });
+    } catch (error) {
+      setSecuritySessions((current) => ({
+        ...current,
+        isLoading: false,
+        errorMessage: error?.message || "移除登录设备失败，请稍后重试",
+      }));
+    }
+  }
+
+  function openSecuritySessions() {
+    setSecurityOpen(true);
+    loadSecuritySessions();
+  }
+
+  const otherSessionCount = securitySessions.items.filter((session) => !session.current).length;
 
   return (
     <div className="h-full bg-white overflow-y-auto">
@@ -76,26 +148,107 @@ export function SettingsView() {
               <div className="flex items-start justify-between pb-6 border-b border-slate-50 gap-6">
                 <div>
                   <div className="font-medium text-slate-900 flex items-center gap-2">
-                    平台账号绑定 <Badge color="green">已绑定</Badge>
+                    邮箱账号绑定 <Badge color="green">已绑定</Badge>
                   </div>
                   <div className="text-sm text-slate-500 mt-1 max-w-lg">
-                    您的邮箱已与悦享e食主账号({profile?.unifiedAccountPhone || "138****8888"})深度绑定。支持一键 SSO 登录及生态消息互通。
+                    您的邮箱已与公司账号({profile?.unifiedAccountPhone || "未绑定手机号"})绑定。后台可按配置启用邮箱、手机号验证码或 OAuth 登录。
                   </div>
                   <div className="mt-3 p-3 bg-[#E5F5FF] text-[#007ACC] text-xs rounded-md flex items-start gap-2 border border-[#B3E0FF]">
                     <Info size={14} className="mt-0.5 shrink-0" />
-                    安全规则：当您注销悦享e食主账号时，为保障数据安全，此邮箱及所有数据将被自动回收并永久销毁。
+                    安全规则：账号被后台禁用、启用或重置密码时，BFF 会同步真实邮件服务，避免本地状态与邮箱底座不一致。
                   </div>
                 </div>
-                <Button variant="secondary" disabled>管理授权</Button>
+                <Badge color="blue">系统托管</Badge>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-6">
                 <div>
                   <div className="font-medium text-slate-900">登录设备管理</div>
                   <div className="text-sm text-slate-500 mt-1">查看最近登录的设备及 IP 异常。</div>
                 </div>
-                <Button variant="ghost">查看记录</Button>
+                <Button variant="ghost" onClick={openSecuritySessions}>
+                  <MonitorSmartphone size={16} />
+                  查看记录
+                </Button>
               </div>
+
+              {securityOpen ? (
+                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-medium text-slate-900">登录设备记录</div>
+                      <div className="text-xs text-slate-500 mt-1">共 {securitySessions.items.length} 个有效登录设备</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="!px-3 !py-1.5"
+                        onClick={loadSecuritySessions}
+                        disabled={securitySessions.isLoading}
+                      >
+                        <RefreshCcw size={15} />
+                        刷新
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!px-3 !py-1.5"
+                        onClick={logoutOtherSessions}
+                        disabled={securitySessions.isLoading || otherSessionCount === 0}
+                      >
+                        <LogOut size={15} />
+                        退出其他设备
+                      </Button>
+                    </div>
+                  </div>
+                  {securitySessions.errorMessage ? (
+                    <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                      {securitySessions.errorMessage}
+                    </div>
+                  ) : null}
+                  <div className="divide-y divide-slate-100">
+                    {securitySessions.isLoading && securitySessions.items.length === 0 ? (
+                      <div className="px-4 py-5 text-sm text-slate-500">正在加载登录设备...</div>
+                    ) : securitySessions.items.length === 0 ? (
+                      <div className="px-4 py-5 text-sm text-slate-500">当前没有有效登录设备。</div>
+                    ) : (
+                      securitySessions.items.map((session) => (
+                        <div key={session.id} className="px-4 py-4 flex items-center justify-between gap-5">
+                          <div className="min-w-0 flex items-start gap-3">
+                            <div className="mt-0.5 h-9 w-9 shrink-0 rounded-md bg-[#E5F5FF] text-[#009BF5] flex items-center justify-center">
+                              <MonitorSmartphone size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div className="font-medium text-slate-900 truncate">{session.device}</div>
+                                {session.current ? <Badge color="green">当前设备</Badge> : null}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500 truncate">IP：{session.ip || "-"}</div>
+                              <div className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                                <Clock3 size={13} />
+                                最近使用 {formatSessionTime(session.lastSeenAt)}
+                              </div>
+                            </div>
+                          </div>
+                          {session.current ? null : (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="shrink-0 !px-3 !py-1.5 text-slate-500"
+                              onClick={() => revokeSession(session.id)}
+                              disabled={securitySessions.isLoading}
+                            >
+                              <LogOut size={15} />
+                              移除
+                            </Button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
 

@@ -17,7 +17,7 @@ button,
 input,
 textarea,
 select {
-  font: inherit;
+  font-family: inherit;
 }
 
 .hide-scrollbar::-webkit-scrollbar {

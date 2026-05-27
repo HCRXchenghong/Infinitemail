@@ -2,12 +2,6 @@ import React from "react";
 import { AlertCircle, Bell, CheckCircle2, Shield, X } from "lucide-react";
 import { cn } from "../../lib/utils/cn";
 
-const roleOptions = [
-  { id: "user", label: "用户" },
-  { id: "merchant", label: "商户" },
-  { id: "rider", label: "骑手" },
-];
-
 const noticeStyleMap = {
   success: {
     container: "bg-[#E5F5FF] text-[#007ACC] border-[#B3E0FF]",
@@ -23,39 +17,13 @@ const noticeStyleMap = {
   },
 };
 
-export function Topbar({ health, notice, profile, roleSwitcherEnabled, onSwitchRole, onDismissNotice }) {
-  const activeRole = profile?.authMode || "user";
+export function Topbar({ health, notice, onDismissNotice }) {
   const noticeTone = noticeStyleMap[notice?.tone] ? notice.tone : "info";
   const NoticeIcon = noticeStyleMap[noticeTone].icon;
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
       <div className="flex-1 max-w-2xl flex items-center gap-3 min-w-0">
-        {roleSwitcherEnabled ? (
-          <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
-            {roleOptions.map((role) => {
-              const isActive = activeRole === role.id;
-              return (
-                <button
-                  key={role.id}
-                  type="button"
-                  onClick={() => {
-                    if (!isActive) {
-                      onSwitchRole?.(role.id);
-                    }
-                  }}
-                  className={cn(
-                    "px-3 py-1.5 text-sm rounded-md transition-colors",
-                    isActive ? "bg-white shadow-sm text-slate-800" : "text-slate-600 hover:text-slate-800",
-                  )}
-                >
-                  {role.label}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-
         {notice ? (
           <div className={cn("min-w-0 flex-1 flex items-center gap-2 rounded-md border px-3 py-2 text-sm", noticeStyleMap[noticeTone].container)}>
             <NoticeIcon size={16} className="shrink-0" />

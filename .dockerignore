@@ -1,0 +1,11 @@
+.git
+.data
+bff/.data
+dist
+dist-admin
+node_modules
+*.log
+.DS_Store
+.env
+.env.local
+.env.production

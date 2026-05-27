@@ -10,7 +10,6 @@ import { postOfficeApi } from "../services/postOfficeApi";
 const PostOfficeContext = createContext(null);
 
 const MAILBOX_VIEWS = POST_OFFICE_VISIBLE_MAIL_FOLDERS;
-const CONTACT_HISTORY_FOLDERS = ["inbox", "sent", "drafts", "starred", "trash"];
 const CONTACT_THREAD_PAGE_SIZE = 5;
 
 const initialCompose = {
@@ -18,7 +17,8 @@ const initialCompose = {
   recipients: "",
   subject: "",
   body: "",
-  inviteRole: "merchant",
+  attachments: [],
+  inviteRole: "account",
   inviteEmails: "",
 };
 
@@ -64,6 +64,13 @@ function createInitialSettingsState() {
   };
 }
 
+function createInitialSecuritySessionsState() {
+  return {
+    items: [],
+    isLoading: false,
+  };
+}
+
 function createInitialContactThreadState() {
   return {
     contactId: null,
@@ -81,7 +88,137 @@ function createInitialAuthFlow(rolePrefix = "user-") {
   return {
     rolePrefix,
     requiresActivation: true,
+    requiresProvisioning: false,
+    provisioningStatus: "pending_config",
+    mailboxProvisioned: false,
+    profile: null,
     hasAuthenticatedSession: false,
+    isLoading: false,
+    errorMessage: "",
+  };
+}
+
+function createInitialAdminConfig() {
+  return {
+    mailbox: {
+      domain: runtimeConfig.mailboxDomain || "yuexiang.com",
+      prefixPolicyEnabled: true,
+      allowedPrefixes: ["user", "admin", "support"],
+      defaultPrefix: "user",
+      dns: {
+        status: "pending",
+        domain: runtimeConfig.mailboxDomain || "yuexiang.com",
+        selector: "infinitemail",
+        records: [],
+        recommended: [],
+        verifiedRecords: 0,
+        totalRecords: 4,
+      },
+      server: {
+        provider: "stalwart",
+        enabled: false,
+        strictDataPlane: false,
+        baseUrl: "",
+        provisionPath: "",
+        lifecyclePath: "",
+        messageListPath: "",
+        messageDetailPath: "",
+        messageSendPath: "",
+        draftPath: "",
+        messageStarPath: "",
+        messageMovePath: "",
+        messageReadPath: "",
+        adminTokenSet: false,
+        smtpEnabled: false,
+        smtpHost: "",
+        smtpPort: 25,
+        smtpUsername: "",
+        smtpPasswordSet: false,
+        smtpTlsMode: "auto",
+        imapEnabled: false,
+        imapHost: "",
+        imapPort: 993,
+        imapUsername: "{email}",
+        imapPasswordSet: false,
+        imapTlsMode: "tls",
+        status: "not_configured",
+      },
+    },
+    auth: {
+      oauthEnabled: true,
+      oauthProviderName: "悦享账号",
+      oauthClientId: "",
+      oauthClientSecretSet: false,
+      oauthAuthorizeUrl: "",
+      oauthTokenUrl: "",
+      oauthUserInfoUrl: "",
+      oauthRedirectUrl: "",
+      oauthScopes: ["openid", "profile", "email", "phone"],
+      oauthSubjectField: "sub",
+      oauthPhoneField: "phone",
+      oauthEmailField: "email",
+      oauthNameField: "name",
+      passwordLoginEnabled: true,
+      phoneLoginEnabled: true,
+      emailLoginEnabled: false,
+      registrationEnabled: true,
+      inviteRequired: true,
+      loginLandingMode: "oauth",
+    },
+    sms: {
+      provider: "aliyun",
+      aliyunEnabled: false,
+      accessKeyId: "",
+      accessKeySecretSet: false,
+      signName: "",
+      templateCode: "",
+      codeTtlMinutes: 5,
+    },
+    ops: {
+      autoRunEnabled: false,
+      intervalMinutes: 5,
+      lastRunStatus: "idle",
+      lastRunMessage: "自动巡检未开启",
+    },
+    security: {
+      username: "admin",
+      passwordSet: false,
+      apiTokenSet: false,
+      apiTokenMasked: "",
+    },
+    deployment: {
+      strict: false,
+      ready: false,
+      status: "development",
+      store: "json",
+      blockingCount: 0,
+      checks: [],
+    },
+    usage: {
+      activeSeats: 0,
+      reservedSeats: 0,
+      usedSeats: 0,
+      seatLimit: 0,
+      storageUsedBytes: 0,
+      storageUsedMb: 0,
+      storageLimitGb: 0,
+      storagePercent: 0,
+    },
+    provisionJobs: [],
+    invites: [],
+    smsLogs: [],
+    auditLogs: [],
+    registeredUsers: [],
+    updatedAt: null,
+  };
+}
+
+function createInitialAdminAuth() {
+  return {
+    checked: false,
+    authRequired: false,
+    isAuthenticated: false,
+    username: "admin",
     isLoading: false,
     errorMessage: "",
   };
@@ -98,48 +235,76 @@ function normalizeString(value) {
   return String(value == null ? "" : value).trim();
 }
 
+function normalizeProvisioningStatus(value, hasEmail = false) {
+  switch (normalizeString(value).toLowerCase()) {
+    case "provisioned":
+    case "active":
+      return "provisioned";
+    case "queued":
+    case "pending":
+      return "queued";
+    case "failed":
+      return "failed";
+    case "pending_config":
+      return "pending_config";
+    default:
+      return hasEmail ? "queued" : "pending_config";
+  }
+}
+
+function buildAuthFlowFromSession(session = {}, current = {}) {
+  const hasAuthenticatedSession = Boolean(session?.isAuthenticated);
+  const nextProfile = hasAuthenticatedSession ? (session?.profile || current.profile || null) : null;
+  const hasEmail = Boolean(normalizeString(nextProfile?.email));
+  const provisioningStatus = normalizeProvisioningStatus(
+    session?.provisioningStatus || nextProfile?.provisioningStatus,
+    hasEmail,
+  );
+  const mailboxProvisioned = Boolean(session?.mailboxProvisioned ?? nextProfile?.mailboxProvisioned) || provisioningStatus === "provisioned";
+  const requiresActivation = hasAuthenticatedSession && (Boolean(session?.requiresActivation) || !hasEmail);
+  const requiresProvisioning = hasAuthenticatedSession && !requiresActivation && (Boolean(session?.requiresProvisioning) || !mailboxProvisioned);
+
+  return {
+    rolePrefix: session?.rolePrefix || nextProfile?.rolePrefix || current.rolePrefix || "user-",
+    requiresActivation,
+    requiresProvisioning,
+    provisioningStatus,
+    mailboxProvisioned,
+    profile: nextProfile,
+    hasAuthenticatedSession,
+    isLoading: false,
+    errorMessage: session?.errorMessage || current.errorMessage || "",
+  };
+}
+
+function provisioningNotice(status, action = "登录") {
+  switch (normalizeProvisioningStatus(status, true)) {
+    case "provisioned":
+      return `${action}成功，已进入邮箱`;
+    case "queued":
+      return "邮箱开通任务处理中，开通成功后即可进入";
+    case "failed":
+      return "邮箱开通失败，请联系管理员处理";
+    default:
+      return "邮件服务尚未配置，邮箱已保留，等待后台开通";
+  }
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
 function resolveRoleName(role) {
   switch (normalizeString(role).toLowerCase()) {
-    case "merchant":
-      return "商户";
-    case "rider":
-      return "骑手";
+    case "account":
+      return "账号开通";
+    case "collaboration":
+      return "协作";
+    case "notice":
+      return "通知";
     default:
       return "用户";
   }
-}
-
-function matchesContactMessage(message, contact) {
-  const contactEmail = normalizeString(contact?.email).toLowerCase();
-  const contactName = normalizeString(contact?.name).toLowerCase();
-  const senderEmail = normalizeString(message?.senderEmail).toLowerCase();
-  const recipients = normalizeArray(message?.recipients).map((item) => normalizeString(item).toLowerCase());
-  const haystack = [
-    message?.sender,
-    message?.subject,
-    message?.snippet,
-    ...normalizeArray(message?.tags),
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  if (contactEmail && (senderEmail === contactEmail || recipients.includes(contactEmail))) {
-    return true;
-  }
-
-  if (contactName && haystack.includes(contactName)) {
-    return true;
-  }
-
-  return false;
-}
-
-function compareMessageTime(left, right) {
-  return new Date(right?.sortAt || 0).getTime() - new Date(left?.sortAt || 0).getTime();
 }
 
 function paginateThreadItems(items, page = 1, pageSize = CONTACT_THREAD_PAGE_SIZE) {
@@ -170,9 +335,13 @@ export function PostOfficeProvider({ children }) {
   const [contacts, setContacts] = useState(createInitialContactsState);
   const [contactThread, setContactThread] = useState(createInitialContactThreadState);
   const [settings, setSettings] = useState(createInitialSettingsState);
+  const [securitySessions, setSecuritySessions] = useState(createInitialSecuritySessionsState);
   const [templates, setTemplates] = useState([]);
   const [compose, setCompose] = useState(initialCompose);
   const [notice, setNotice] = useState(null);
+  const [adminConfig, setAdminConfig] = useState(createInitialAdminConfig);
+  const [adminAuth, setAdminAuth] = useState(createInitialAdminAuth);
+  const [adminConfigLoading, setAdminConfigLoading] = useState(false);
 
   const clearNotice = useCallback(() => {
     setNotice(null);
@@ -190,6 +359,99 @@ export function PostOfficeProvider({ children }) {
       message: nextMessage,
     });
   }, []);
+
+  const loadAdminConfig = useCallback(async () => {
+    setAdminConfigLoading(true);
+    try {
+      const nextConfig = await postOfficeApi.getAdminConfig();
+      setAdminConfig(nextConfig || createInitialAdminConfig());
+      return nextConfig;
+    } catch (error) {
+      if (error?.status === 401) {
+        setAdminAuth((current) => ({
+          ...current,
+          checked: true,
+          authRequired: true,
+          isAuthenticated: false,
+          isLoading: false,
+          errorMessage: "请先登录管理后台",
+        }));
+      }
+      showNotice(error?.message || "后台配置加载失败", "warning");
+      return adminConfig;
+    } finally {
+      setAdminConfigLoading(false);
+    }
+  }, [adminConfig, showNotice]);
+
+  const loadAdminAuthSession = useCallback(async () => {
+    setAdminAuth((current) => ({ ...current, isLoading: true, errorMessage: "" }));
+    try {
+      const session = await postOfficeApi.getAdminAuthSession();
+      const nextAuth = {
+        checked: true,
+        authRequired: Boolean(session?.authRequired),
+        isAuthenticated: Boolean(session?.isAuthenticated),
+        username: normalizeString(session?.username) || "admin",
+        isLoading: false,
+        errorMessage: "",
+      };
+      setAdminAuth(nextAuth);
+      return nextAuth;
+    } catch (error) {
+      const nextAuth = {
+        ...createInitialAdminAuth(),
+        checked: true,
+        authRequired: true,
+        isAuthenticated: false,
+        errorMessage: error?.message || "管理后台认证状态检查失败",
+      };
+      setAdminAuth(nextAuth);
+      return nextAuth;
+    }
+  }, []);
+
+  const loginAdmin = useCallback(async (payload) => {
+    setAdminAuth((current) => ({ ...current, isLoading: true, errorMessage: "" }));
+    try {
+      const session = await postOfficeApi.loginAdmin(payload);
+      const nextAuth = {
+        checked: true,
+        authRequired: Boolean(session?.authRequired),
+        isAuthenticated: Boolean(session?.isAuthenticated),
+        username: normalizeString(session?.username || payload?.username) || "admin",
+        isLoading: false,
+        errorMessage: "",
+      };
+      setAdminAuth(nextAuth);
+      showNotice("管理后台已登录", "success");
+      await loadAdminConfig();
+      return session;
+    } catch (error) {
+      setAdminAuth((current) => ({
+        ...current,
+        checked: true,
+        authRequired: true,
+        isAuthenticated: false,
+        isLoading: false,
+        errorMessage: error?.message || "管理员登录失败",
+      }));
+      showNotice(error?.message || "管理员登录失败", "warning");
+      return null;
+    }
+  }, [loadAdminConfig, showNotice]);
+
+  const logoutAdmin = useCallback(async () => {
+    await postOfficeApi.logoutAdmin();
+    setAdminConfig(createInitialAdminConfig());
+    setAdminAuth((current) => ({
+      ...current,
+      checked: true,
+      isAuthenticated: !current.authRequired,
+      errorMessage: "",
+    }));
+    showNotice("已退出管理后台", "success");
+  }, [showNotice]);
 
   useEffect(() => {
     if (!notice?.id) {
@@ -213,6 +475,7 @@ export function PostOfficeProvider({ children }) {
     setContacts(createInitialContactsState());
     setContactThread(createInitialContactThreadState());
     setSettings(createInitialSettingsState());
+    setSecuritySessions(createInitialSecuritySessionsState());
     setTemplates([]);
     setCompose(initialCompose);
   }, []);
@@ -231,6 +494,7 @@ export function PostOfficeProvider({ children }) {
     setProfile(bootstrap.profile);
     setHealth(bootstrap.health || createInitialHealth());
     setSettings({ data: bootstrap.settings, isLoading: false });
+    setSecuritySessions(createInitialSecuritySessionsState());
     setContacts({
       items: bootstrap.contacts,
       selectedContactId: bootstrap.contacts[0]?.id || null,
@@ -249,19 +513,19 @@ export function PostOfficeProvider({ children }) {
     setCurrentViewState(folderId);
   }, []);
 
-  const bootstrap = useCallback(async () => {
-    setIsBootstrapping(true);
-    try {
-      const session = await postOfficeApi.getSession();
-      setAuthFlow({
-        rolePrefix: session.rolePrefix || "user-",
-        requiresActivation: Boolean(session.requiresActivation),
-        hasAuthenticatedSession: Boolean(session.isAuthenticated),
-        isLoading: false,
-        errorMessage: "",
-      });
+	  const bootstrap = useCallback(async () => {
+	    setIsBootstrapping(true);
+	    try {
+	      const session = await postOfficeApi.getSession();
+	      let nextAdminConfig = session.adminConfig || null;
+      if (!nextAdminConfig) {
+        nextAdminConfig = await postOfficeApi.getAdminConfig().catch(() => null);
+      }
+	      setAdminConfig(session.adminConfig || nextAdminConfig || createInitialAdminConfig());
+      const nextAuthFlow = buildAuthFlowFromSession(session);
+      setAuthFlow(nextAuthFlow);
 
-      if (session.isAuthenticated && !session.requiresActivation) {
+      if (session.isAuthenticated && !nextAuthFlow.requiresActivation && !nextAuthFlow.requiresProvisioning) {
         await hydrateAuthenticatedState(POST_OFFICE_DEFAULT_FOLDER);
       } else {
         resetWorkspaceState();
@@ -279,16 +543,13 @@ export function PostOfficeProvider({ children }) {
     setAuthFlow((current) => ({ ...current, isLoading: true, errorMessage: "" }));
     try {
       const result = await postOfficeApi.beginOAuthLogin();
-      setAuthFlow((current) => ({
-        ...current,
-        rolePrefix: result.rolePrefix || current.rolePrefix,
-        requiresActivation: Boolean(result?.requiresActivation),
-        hasAuthenticatedSession: Boolean(result?.isAuthenticated),
-        errorMessage: result?.errorMessage || "",
-      }));
+      const nextAuthFlow = buildAuthFlowFromSession(result, { errorMessage: result?.errorMessage || "" });
+      setAuthFlow(nextAuthFlow);
 
-      if (result?.isAuthenticated && !result.requiresActivation) {
+      if (result?.isAuthenticated && !nextAuthFlow.requiresActivation && !nextAuthFlow.requiresProvisioning) {
         await hydrateAuthenticatedState(POST_OFFICE_DEFAULT_FOLDER);
+      } else {
+        resetWorkspaceState();
       }
 
       return result;
@@ -308,21 +569,30 @@ export function PostOfficeProvider({ children }) {
     } finally {
       setAuthFlow((current) => ({ ...current, isLoading: false }));
     }
-  }, [hydrateAuthenticatedState]);
+  }, [hydrateAuthenticatedState, resetWorkspaceState]);
 
   const activateMailbox = useCallback(
-    async (emailPrefix) => {
+    async (payload) => {
       setAuthFlow((current) => ({ ...current, isLoading: true }));
       try {
-        await postOfficeApi.activateMailbox({ emailPrefix });
-        setAuthFlow((current) => ({
-          ...current,
-          errorMessage: "",
-          hasAuthenticatedSession: true,
+        const result = await postOfficeApi.activateMailbox(payload);
+        const nextAuthFlow = buildAuthFlowFromSession({
+          isAuthenticated: true,
           requiresActivation: false,
-        }));
-        await hydrateAuthenticatedState(POST_OFFICE_DEFAULT_FOLDER);
-        showNotice("邮箱已开通，已进入悦享邮局", "success");
+          requiresProvisioning: !result?.mailbox?.mailboxProvisioned,
+          mailboxProvisioned: Boolean(result?.mailbox?.mailboxProvisioned),
+          provisioningStatus: result?.mailbox?.provisioningStatus,
+          profile: result?.mailbox,
+          rolePrefix: result?.mailbox?.rolePrefix,
+        });
+        setAuthFlow(nextAuthFlow);
+        if (!nextAuthFlow.requiresProvisioning) {
+          await hydrateAuthenticatedState(POST_OFFICE_DEFAULT_FOLDER);
+          showNotice("邮箱已真实开通，已进入悦享邮局", "success");
+        } else {
+          resetWorkspaceState();
+          showNotice(provisioningNotice(nextAuthFlow.provisioningStatus, "开通"), "warning");
+        }
       } catch (error) {
         setAuthFlow((current) => ({
           ...current,
@@ -333,7 +603,7 @@ export function PostOfficeProvider({ children }) {
         setAuthFlow((current) => ({ ...current, isLoading: false }));
       }
     },
-    [hydrateAuthenticatedState, showNotice],
+    [hydrateAuthenticatedState, resetWorkspaceState, showNotice],
   );
 
   const logout = useCallback(async () => {
@@ -342,13 +612,7 @@ export function PostOfficeProvider({ children }) {
     resetWorkspaceState();
 
     const session = await postOfficeApi.getSession();
-    setAuthFlow({
-      rolePrefix: session.rolePrefix || "user-",
-      requiresActivation: Boolean(session.requiresActivation),
-      hasAuthenticatedSession: Boolean(session.isAuthenticated),
-      isLoading: false,
-      errorMessage: "",
-    });
+    setAuthFlow(buildAuthFlowFromSession(session));
   }, [clearNotice, resetWorkspaceState]);
 
   const loadFolder = useCallback(async (folderId, queryOverrides = {}) => {
@@ -397,11 +661,28 @@ export function PostOfficeProvider({ children }) {
   }, []);
 
   const selectMail = useCallback((messageId) => {
+    const currentMessage = mailbox.items.find((item) => item.id === messageId);
     setMailbox((current) => ({
       ...current,
       selectedMailId: messageId,
+      items: current.items.map((item) =>
+        item.id === messageId && item.isUnread ? { ...item, isUnread: false } : item,
+      ),
     }));
-  }, []);
+    if (!currentMessage?.isUnread || currentMessage.isOutgoing) {
+      return;
+    }
+    if (mailbox.activeFolder === "inbox") {
+      setFolderCounts((current) => ({
+        ...current,
+        inbox: Math.max(0, Number(current.inbox || 0) - 1),
+      }));
+    }
+    postOfficeApi.updateMessageReadState(messageId, { isUnread: false }).catch((error) => {
+      setNotice({ type: "error", message: error.message || "邮件已读状态同步失败" });
+      loadFolder(mailbox.activeFolder, mailbox.query);
+    });
+  }, [loadFolder, mailbox.activeFolder, mailbox.items, mailbox.query]);
 
   const toggleStar = useCallback(async (messageId) => {
     const currentMessage = mailbox.items.find((item) => item.id === messageId);
@@ -458,6 +739,40 @@ export function PostOfficeProvider({ children }) {
     }));
   }, []);
 
+  const addComposeAttachments = useCallback((attachments) => {
+    const nextAttachments = normalizeArray(attachments).filter(Boolean);
+    if (!nextAttachments.length) {
+      return;
+    }
+    setCompose((current) => ({
+      ...current,
+      attachments: [...normalizeArray(current.attachments), ...nextAttachments].slice(0, 20),
+    }));
+  }, []);
+
+  const uploadComposeAttachments = useCallback(async (attachments) => {
+    const nextAttachments = normalizeArray(attachments).filter(Boolean);
+    if (!nextAttachments.length) {
+      return [];
+    }
+    try {
+      const uploaded = await postOfficeApi.uploadAttachments(nextAttachments);
+      addComposeAttachments(uploaded);
+      return uploaded;
+    } catch (error) {
+      showNotice(error?.message || "附件上传失败，请重新选择", "warning");
+      return [];
+    }
+  }, [addComposeAttachments, showNotice]);
+
+  const removeComposeAttachment = useCallback((attachmentId) => {
+    const normalizedId = normalizeString(attachmentId);
+    setCompose((current) => ({
+      ...current,
+      attachments: normalizeArray(current.attachments).filter((attachment) => attachment?.id !== normalizedId),
+    }));
+  }, []);
+
   const openComposeForContact = useCallback((contact) => {
     setCompose({
       ...initialCompose,
@@ -482,40 +797,15 @@ export function PostOfficeProvider({ children }) {
     }));
 
     try {
-      const folderPayloads = await Promise.all(
-        CONTACT_HISTORY_FOLDERS.map(async (folderId) => ({
-          folderId,
-          payload: await postOfficeApi.listMessages({
-            folderId,
-            filter: POST_OFFICE_DEFAULT_FILTER,
-            search: "",
-          }),
-        })),
-      );
-
-      const matches = folderPayloads
-        .flatMap(({ folderId, payload }) =>
-          normalizeArray(payload.items).map((item) => ({
-            ...item,
-            folderId,
-          })),
-        )
-        .filter((item) => matchesContactMessage(item, contact))
-        .reduce((accumulator, item) => {
-          if (!accumulator.some((entry) => entry.id === item.id)) {
-            accumulator.push(item);
-          }
-          return accumulator;
-        }, [])
-        .sort(compareMessageTime);
-
-      const threadPage = paginateThreadItems(matches);
+      const backendThread = await postOfficeApi.getContactThread(contact.id);
+      const threadPage = paginateThreadItems(normalizeArray(backendThread?.items));
       setContactThread({
         contactId: contact.id,
         ...threadPage,
+        total: Number(backendThread?.total || threadPage.total || 0),
         isLoading: false,
       });
-      return matches;
+      return normalizeArray(backendThread?.items);
     } catch (error) {
       setContactThread((current) => ({
         ...current,
@@ -621,7 +911,7 @@ export function PostOfficeProvider({ children }) {
         await loadFolder("sent", { search: "", filter: POST_OFFICE_DEFAULT_FILTER });
         await loadContacts("");
         showNotice(
-          `已向 ${result?.recipientCount || recipients.length} 位${resolveRoleName(result?.role || compose.inviteRole)}对象发送邀请函`,
+          `已向 ${result?.recipientCount || recipients.length} 位${resolveRoleName(result?.role || compose.inviteRole)}对象发送通知邮件`,
           "success",
         );
         return result;
@@ -632,6 +922,7 @@ export function PostOfficeProvider({ children }) {
         recipients,
         subject: compose.subject,
         body: compose.body,
+        attachments: normalizeArray(compose.attachments),
       });
 
       setCompose(initialCompose);
@@ -652,6 +943,7 @@ export function PostOfficeProvider({ children }) {
         recipients: parseRecipients(compose.recipients),
         subject: compose.subject,
         body: compose.body,
+        attachments: normalizeArray(compose.attachments),
       });
 
       setCurrentViewState("drafts");
@@ -664,6 +956,11 @@ export function PostOfficeProvider({ children }) {
       return null;
     }
   }, [compose, loadContacts, loadFolder, showNotice]);
+
+  const discardCompose = useCallback(() => {
+    setCompose(initialCompose);
+    showNotice("已清空当前编辑内容", "success");
+  }, [showNotice]);
 
   const saveSettings = useCallback(async (patch) => {
     const nextPatch = patch && typeof patch === "object" ? patch : {};
@@ -696,47 +993,305 @@ export function PostOfficeProvider({ children }) {
     }
   }, [settings.data, showNotice]);
 
-  const switchRole = useCallback(async (role) => {
-    if (!runtimeConfig.devSsoEnabled) {
-      showNotice("当前环境未开启开发角色切换", "warning");
+  const loadSecuritySessions = useCallback(async () => {
+    if (typeof postOfficeApi.listSecuritySessions !== "function") {
+      showNotice("登录设备接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+    setSecuritySessions((current) => ({ ...current, isLoading: true }));
+    try {
+      const payload = await postOfficeApi.listSecuritySessions();
+      setSecuritySessions({
+        items: normalizeArray(payload?.items),
+        isLoading: false,
+      });
+      return payload;
+    } catch (error) {
+      setSecuritySessions((current) => ({ ...current, isLoading: false }));
+      showNotice(error?.message || "登录设备加载失败，请稍后重试", "warning");
+      return null;
+    }
+  }, [showNotice]);
+
+  const logoutOtherSecuritySessions = useCallback(async () => {
+    if (typeof postOfficeApi.logoutOtherSecuritySessions !== "function") {
+      showNotice("登录设备接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+    setSecuritySessions((current) => ({ ...current, isLoading: true }));
+    try {
+      const payload = await postOfficeApi.logoutOtherSecuritySessions();
+      setSecuritySessions({
+        items: normalizeArray(payload?.items),
+        isLoading: false,
+      });
+      showNotice(`已退出 ${Number(payload?.removed || 0)} 个其他登录设备`, "success");
+      return payload;
+    } catch (error) {
+      setSecuritySessions((current) => ({ ...current, isLoading: false }));
+      showNotice(error?.message || "退出其他设备失败，请稍后重试", "warning");
+      return null;
+    }
+  }, [showNotice]);
+
+  const revokeSecuritySession = useCallback(async (sessionId) => {
+    if (typeof postOfficeApi.revokeSecuritySession !== "function") {
+      showNotice("登录设备接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+    setSecuritySessions((current) => ({ ...current, isLoading: true }));
+    try {
+      const payload = await postOfficeApi.revokeSecuritySession(sessionId);
+      setSecuritySessions({
+        items: normalizeArray(payload?.items),
+        isLoading: false,
+      });
+      showNotice("登录设备已移除", "success");
+      return payload;
+    } catch (error) {
+      setSecuritySessions((current) => ({ ...current, isLoading: false }));
+      showNotice(error?.message || "移除登录设备失败，请稍后重试", "warning");
+      return null;
+    }
+  }, [showNotice]);
+
+  const saveAdminConfig = useCallback(async (patch) => {
+    if (typeof postOfficeApi.updateAdminConfig !== "function") {
+      showNotice("管理配置接口不可用，请检查 BFF 服务", "warning");
       return null;
     }
 
-    const nextRole = normalizeString(role).toLowerCase() || "user";
-    setIsBootstrapping(true);
-    clearNotice();
-
+    setAdminConfigLoading(true);
     try {
-      const session = await postOfficeApi.switchDevRole(nextRole);
-      resetWorkspaceState();
-      setAuthFlow({
-        rolePrefix: session?.rolePrefix || "user-",
-        requiresActivation: Boolean(session?.requiresActivation),
-        hasAuthenticatedSession: Boolean(session?.isAuthenticated),
-        isLoading: false,
-        errorMessage: "",
-      });
-
-      if (session?.isAuthenticated && !session.requiresActivation) {
-        await hydrateAuthenticatedState(POST_OFFICE_DEFAULT_FOLDER);
-        showNotice(`已切换到${resolveRoleName(nextRole)}视角`, "success");
-      } else {
-        showNotice(`已切换到${resolveRoleName(nextRole)}视角，请开通对应邮箱`, "success");
-      }
-
-      return session;
+      const nextConfig = await postOfficeApi.updateAdminConfig(patch);
+      setAdminConfig(nextConfig || createInitialAdminConfig());
+      showNotice("后台配置已保存", "success");
+      return nextConfig;
     } catch (error) {
-      setAuthFlow((current) => ({
-        ...current,
-        isLoading: false,
-        errorMessage: error?.message || "角色切换失败，请稍后重试",
-      }));
-      showNotice(error?.message || "角色切换失败，请稍后重试", "warning");
+      showNotice(error?.message || "后台配置保存失败", "warning");
       return null;
     } finally {
-      setIsBootstrapping(false);
+      setAdminConfigLoading(false);
     }
-  }, [clearNotice, hydrateAuthenticatedState, resetWorkspaceState, showNotice]);
+  }, [showNotice]);
+
+  const createMailboxInvite = useCallback(async (payload) => {
+    if (typeof postOfficeApi.createMailboxInvite !== "function") {
+      showNotice("注册链接接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    try {
+      const invite = await postOfficeApi.createMailboxInvite(payload);
+      await loadAdminConfig();
+      showNotice(`已生成 ${invite.email} 的注册链接`, "success");
+      return invite;
+    } catch (error) {
+      showNotice(error?.message || "注册链接生成失败", "warning");
+      return null;
+    }
+  }, [loadAdminConfig, showNotice]);
+
+  const verifyMailboxDomain = useCallback(async () => {
+    if (typeof postOfficeApi.verifyMailboxDomain !== "function") {
+      showNotice("域名验证接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    setAdminConfigLoading(true);
+    try {
+      const nextConfig = await postOfficeApi.verifyMailboxDomain();
+      setAdminConfig(nextConfig || createInitialAdminConfig());
+      const status = nextConfig?.mailbox?.dns?.status;
+      showNotice(status === "verified" ? "域名 DNS 已全部通过" : "域名 DNS 已检查，请查看未通过记录", status === "verified" ? "success" : "warning");
+      return nextConfig;
+    } catch (error) {
+      showNotice(error?.message || "域名 DNS 验证失败", "warning");
+      return null;
+    } finally {
+      setAdminConfigLoading(false);
+    }
+  }, [showNotice]);
+
+  const testMailServer = useCallback(async () => {
+    if (typeof postOfficeApi.testMailServer !== "function") {
+      showNotice("邮件服务测试接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    setAdminConfigLoading(true);
+    try {
+      const nextConfig = await postOfficeApi.testMailServer();
+      setAdminConfig(nextConfig || createInitialAdminConfig());
+      const status = nextConfig?.mailbox?.server?.status;
+      showNotice(status === "online" ? "邮件服务连接正常" : "邮件服务暂未连通", status === "online" ? "success" : "warning");
+      return nextConfig;
+    } catch (error) {
+      showNotice(error?.message || "邮件服务测试失败", "warning");
+      return null;
+    } finally {
+      setAdminConfigLoading(false);
+    }
+  }, [showNotice]);
+
+  const disableMailboxAccount = useCallback(async (accountId) => {
+    if (typeof postOfficeApi.disableMailboxAccount !== "function") {
+      showNotice("账号禁用接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    try {
+      const result = await postOfficeApi.disableMailboxAccount(accountId);
+      await loadAdminConfig();
+      showNotice("账号已禁用，会话已清理", "success");
+      return result;
+    } catch (error) {
+      showNotice(error?.message || "账号禁用失败", "warning");
+      return null;
+    }
+  }, [loadAdminConfig, showNotice]);
+
+  const enableMailboxAccount = useCallback(async (accountId) => {
+    if (typeof postOfficeApi.enableMailboxAccount !== "function") {
+      showNotice("账号启用接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    try {
+      const result = await postOfficeApi.enableMailboxAccount(accountId);
+      await loadAdminConfig();
+      showNotice("账号已启用", "success");
+      return result;
+    } catch (error) {
+      showNotice(error?.message || "账号启用失败", "warning");
+      return null;
+    }
+  }, [loadAdminConfig, showNotice]);
+
+  const resetMailboxAccountPassword = useCallback(async (accountId) => {
+    if (typeof postOfficeApi.resetMailboxAccountPassword !== "function") {
+      showNotice("重置密码接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    try {
+      const result = await postOfficeApi.resetMailboxAccountPassword(accountId);
+      await loadAdminConfig();
+      showNotice(`临时密码：${result?.temporaryPassword || "-"}`, "success");
+      return result;
+    } catch (error) {
+      showNotice(error?.message || "重置密码失败", "warning");
+      return null;
+    }
+  }, [loadAdminConfig, showNotice]);
+
+  const retryMailboxProvision = useCallback(async (accountId) => {
+    if (typeof postOfficeApi.retryMailboxProvision !== "function") {
+      showNotice("邮箱开通接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    try {
+      const result = await postOfficeApi.retryMailboxProvision(accountId);
+      await loadAdminConfig();
+      showNotice(result?.message || "邮箱已真实开通", "success");
+      return result;
+    } catch (error) {
+      showNotice(error?.message || "邮箱开通重试失败", "warning");
+      return null;
+    }
+  }, [loadAdminConfig, showNotice]);
+
+  const runOperationalTasks = useCallback(async () => {
+    if (typeof postOfficeApi.runOperationalTasks !== "function") {
+      showNotice("任务中心接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    try {
+      const result = await postOfficeApi.runOperationalTasks();
+      const nextConfig = result?.config || result;
+      setAdminConfig(nextConfig || createInitialAdminConfig());
+      const provisioning = result?.summary?.provisioning;
+      showNotice(provisioning?.message || "任务中心已执行", provisioning?.failed ? "warning" : "success");
+      return result;
+    } catch (error) {
+      showNotice(error?.message || "任务中心执行失败", "warning");
+      return null;
+    }
+  }, [showNotice]);
+
+  const sendAuthSmsCode = useCallback(async (payload) => {
+    if (typeof postOfficeApi.sendAuthSmsCode !== "function") {
+      showNotice("短信验证码接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    try {
+      const log = await postOfficeApi.sendAuthSmsCode(payload);
+      await loadAdminConfig();
+      showNotice(log?.provider === "aliyun" ? "验证码已通过阿里云短信发送" : `验证码已生成：${log.code}`, "success");
+      return log;
+    } catch (error) {
+      showNotice(error?.message || "验证码发送失败", "warning");
+      return null;
+    }
+  }, [loadAdminConfig, showNotice]);
+
+  const registerWithPassword = useCallback(async (payload) => {
+    if (typeof postOfficeApi.registerWithPassword !== "function") {
+      showNotice("注册接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    setAuthFlow((current) => ({ ...current, isLoading: true, errorMessage: "" }));
+    try {
+      const session = await postOfficeApi.registerWithPassword(payload);
+      await loadAdminConfig();
+      const nextAuthFlow = buildAuthFlowFromSession(session);
+      setAuthFlow(nextAuthFlow);
+      if (!nextAuthFlow.requiresActivation && !nextAuthFlow.requiresProvisioning) {
+        await hydrateAuthenticatedState(POST_OFFICE_DEFAULT_FOLDER);
+      } else {
+        resetWorkspaceState();
+      }
+      showNotice(provisioningNotice(nextAuthFlow.provisioningStatus, "注册"), nextAuthFlow.mailboxProvisioned ? "success" : "warning");
+      return true;
+    } catch (error) {
+      setAuthFlow((current) => ({ ...current, errorMessage: error?.message || "注册失败" }));
+      showNotice(error?.message || "注册失败", "warning");
+      return null;
+    } finally {
+      setAuthFlow((current) => ({ ...current, isLoading: false }));
+    }
+  }, [hydrateAuthenticatedState, loadAdminConfig, resetWorkspaceState, showNotice]);
+
+  const loginWithPassword = useCallback(async (payload) => {
+    if (typeof postOfficeApi.loginWithPassword !== "function") {
+      showNotice("登录接口不可用，请检查 BFF 服务", "warning");
+      return null;
+    }
+
+    setAuthFlow((current) => ({ ...current, isLoading: true, errorMessage: "" }));
+    try {
+      const session = await postOfficeApi.loginWithPassword(payload);
+      const nextAuthFlow = buildAuthFlowFromSession(session);
+      setAuthFlow(nextAuthFlow);
+      if (!nextAuthFlow.requiresActivation && !nextAuthFlow.requiresProvisioning) {
+        await hydrateAuthenticatedState(POST_OFFICE_DEFAULT_FOLDER);
+      } else {
+        resetWorkspaceState();
+      }
+      showNotice(provisioningNotice(nextAuthFlow.provisioningStatus, "登录"), nextAuthFlow.mailboxProvisioned ? "success" : "warning");
+      return true;
+    } catch (error) {
+      setAuthFlow((current) => ({ ...current, errorMessage: error?.message || "登录失败" }));
+      showNotice(error?.message || "登录失败", "warning");
+      return null;
+    } finally {
+      setAuthFlow((current) => ({ ...current, isLoading: false }));
+    }
+  }, [hydrateAuthenticatedState, resetWorkspaceState, showNotice]);
 
   const actions = useMemo(() => ({
     beginUnifiedLogin,
@@ -751,6 +1306,9 @@ export function PostOfficeProvider({ children }) {
     selectContact,
     updateComposeField,
     setComposeMode,
+    addComposeAttachments,
+    uploadComposeAttachments,
+    removeComposeAttachment,
     openComposeForContact,
     loadContactThread,
     loadMoreContactThread,
@@ -759,8 +1317,28 @@ export function PostOfficeProvider({ children }) {
     prepareReply,
     sendCompose,
     saveDraft,
+    discardCompose,
     saveSettings,
-    switchRole,
+    loadSecuritySessions,
+    logoutOtherSecuritySessions,
+    revokeSecuritySession,
+    loadAdminAuthSession,
+    loginAdmin,
+    logoutAdmin,
+    loadAdminConfig,
+    saveAdminConfig,
+    createMailboxInvite,
+    verifyMailboxDomain,
+    testMailServer,
+    disableMailboxAccount,
+    enableMailboxAccount,
+    resetMailboxAccountPassword,
+    retryMailboxProvision,
+    runOperationalTasks,
+    sendAuthSmsCode,
+    registerWithPassword,
+    loginWithPassword,
+    refreshSession: bootstrap,
     dismissNotice: clearNotice,
   }), [
     beginUnifiedLogin,
@@ -775,6 +1353,9 @@ export function PostOfficeProvider({ children }) {
     selectContact,
     updateComposeField,
     setComposeMode,
+    addComposeAttachments,
+    uploadComposeAttachments,
+    removeComposeAttachment,
     openComposeForContact,
     loadContactThread,
     loadMoreContactThread,
@@ -783,8 +1364,28 @@ export function PostOfficeProvider({ children }) {
     prepareReply,
     sendCompose,
     saveDraft,
+    discardCompose,
     saveSettings,
-    switchRole,
+    loadSecuritySessions,
+    logoutOtherSecuritySessions,
+    revokeSecuritySession,
+    loadAdminAuthSession,
+    loginAdmin,
+    logoutAdmin,
+    loadAdminConfig,
+    saveAdminConfig,
+    createMailboxInvite,
+    verifyMailboxDomain,
+    testMailServer,
+    disableMailboxAccount,
+    enableMailboxAccount,
+    resetMailboxAccountPassword,
+    retryMailboxProvision,
+    runOperationalTasks,
+    sendAuthSmsCode,
+    registerWithPassword,
+    loginWithPassword,
+    bootstrap,
     clearNotice,
   ]);
 
@@ -806,10 +1407,13 @@ export function PostOfficeProvider({ children }) {
       selectedContact,
       contactThread,
       settings,
+      securitySessions,
       templates,
       compose,
       notice,
-      roleSwitcherEnabled: runtimeConfig.devSsoEnabled,
+      adminAuth,
+      adminConfig,
+      adminConfigLoading,
       mailViews: MAILBOX_VIEWS,
       actions,
     };
@@ -825,9 +1429,13 @@ export function PostOfficeProvider({ children }) {
     contacts,
     contactThread,
     settings,
+    securitySessions,
     templates,
     compose,
     notice,
+    adminAuth,
+    adminConfig,
+    adminConfigLoading,
     actions,
   ]);
 

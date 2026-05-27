@@ -3,6 +3,9 @@ node_modules/
 
 # production build
 dist/
+dist-admin/
+.data/
+bff/.data/
 
 # local env files
 .env

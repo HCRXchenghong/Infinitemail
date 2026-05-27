@@ -7,6 +7,8 @@ import { MailWorkspaceView } from "../components/mail/MailWorkspaceView";
 import { ComposeView } from "../views/ComposeView";
 import { ContactsView } from "../views/ContactsView";
 import { SettingsView } from "../views/SettingsView";
+import { AdminConsoleView } from "../views/AdminConsoleView";
+import { runtimeConfig } from "../lib/config/runtime";
 import { POST_OFFICE_DEFAULT_FOLDER, POST_OFFICE_VISIBLE_MAIL_FOLDERS } from "../services/postOfficeContract";
 
 const mailViews = POST_OFFICE_VISIBLE_MAIL_FOLDERS;
@@ -31,12 +33,18 @@ export default function PostOfficeApp() {
     profile,
     health,
     notice,
-    roleSwitcherEnabled,
     actions,
   } = usePostOffice();
+  const isAdminConsole =
+    runtimeConfig.appSurface === "admin" ||
+    (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("admin"));
 
   if (isBootstrapping) {
     return <SplashScreen />;
+  }
+
+  if (isAdminConsole) {
+    return <AdminConsoleView />;
   }
 
   if (!isAuthenticated) {
@@ -71,9 +79,6 @@ export default function PostOfficeApp() {
         <Topbar
           health={health}
           notice={notice}
-          profile={profile}
-          roleSwitcherEnabled={roleSwitcherEnabled}
-          onSwitchRole={actions.switchRole}
           onDismissNotice={actions.dismissNotice}
         />
         <main className="flex-1 overflow-hidden relative">{content}</main>

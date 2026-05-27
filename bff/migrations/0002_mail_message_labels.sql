@@ -1,0 +1,4 @@
+ALTER TABLE mail_messages
+  ADD COLUMN IF NOT EXISTS thread_id text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS time_label text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS date_time_label text NOT NULL DEFAULT '';

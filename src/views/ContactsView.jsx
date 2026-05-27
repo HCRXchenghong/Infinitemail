@@ -54,7 +54,7 @@ export function ContactsView() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="px-4 py-2 text-xs font-medium text-slate-500">生态联系人</div>
+          <div className="px-4 py-2 text-xs font-medium text-slate-500">邮件联系人</div>
           {contacts.items.map((contact) => (
             <div
               key={contact.id}
@@ -71,7 +71,7 @@ export function ContactsView() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm text-slate-900">{contact.name}</span>
-                    <Badge color={contact.role === "平台官方" ? "orange" : "slate"}>{contact.role}</Badge>
+                    <Badge color={contact.role === "邮件联系人" ? "slate" : "blue"}>{contact.role}</Badge>
                   </div>
                   <div className="text-sm text-slate-600 truncate mt-1">{contact.email}</div>
                   <div className="text-xs text-slate-500 mt-1">{contact.organization}</div>
@@ -95,7 +95,7 @@ export function ContactsView() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h2 className="text-2xl font-bold text-slate-900">{selectedContact.name}</h2>
-                        <Badge color={selectedContact.role === "平台官方" ? "orange" : "slate"}>{selectedContact.role}</Badge>
+                        <Badge color={selectedContact.role === "邮件联系人" ? "slate" : "blue"}>{selectedContact.role}</Badge>
                       </div>
                       <p className="text-slate-500 mt-2">{selectedContact.organization}</p>
                       <p className="text-sm text-slate-500 mt-1">{selectedContact.email}</p>
@@ -113,9 +113,9 @@ export function ContactsView() {
                     <div className="text-xs text-slate-400 mt-2">累计 {selectedContact.stats?.totalMessages || 0} 条往来记录</div>
                   </div>
                   <div className="rounded-lg border border-slate-200 p-5 bg-slate-50/60">
-                    <div className="text-sm font-medium text-slate-900">协作关系</div>
+                    <div className="text-sm font-medium text-slate-900">联系人备注</div>
                     <div className="text-sm text-slate-500 mt-2">{selectedContact.note}</div>
-                    <div className="text-xs text-slate-400 mt-2">邀请沉淀 {selectedContact.stats?.inviteCount || 0} 次</div>
+                    <div className="text-xs text-slate-400 mt-2">通知模板触达 {selectedContact.stats?.inviteCount || 0} 次</div>
                   </div>
                 </div>
 
@@ -138,7 +138,7 @@ export function ContactsView() {
                     <Button variant="secondary" onClick={() => actions.openComposeForContact(selectedContact)}>发送邮件</Button>
                     <Button variant="ghost" onClick={() => actions.openContactHistory(selectedContact)}>查看往来邮件</Button>
                   </div>
-                  <div className="text-xs text-slate-400 mt-3">联系人会基于跨角色往来邮件与生态会话自动聚合。</div>
+                  <div className="text-xs text-slate-400 mt-3">联系人会基于真实往来邮件自动聚合。</div>
                 </div>
 
                 <div className="mt-8 pt-6 border-t border-slate-100">

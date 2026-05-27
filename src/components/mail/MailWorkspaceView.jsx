@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Archive, FileText, Mail, MoreVertical, Paperclip, Reply, Forward, Search, Star, Trash2 } from "lucide-react";
+import { Archive, FileText, Mail, Paperclip, Reply, Forward, Search, Star, Trash2 } from "lucide-react";
 import { usePostOffice } from "../../state/PostOfficeContext";
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
@@ -12,6 +12,25 @@ const filters = [
   { id: "important", label: "重要" },
   { id: "attachment", label: "附件邮件" },
 ];
+
+function deliveryStatusLabel(status) {
+  switch (status) {
+    case "draft":
+      return "草稿";
+    case "queued":
+      return "待投递";
+    case "accepted":
+      return "已受理";
+    case "sent":
+      return "已发送";
+    case "delivered":
+      return "已投递";
+    case "failed":
+      return "投递失败";
+    default:
+      return "";
+  }
+}
 
 export function MailWorkspaceView({ folderId }) {
   const { mailbox, selectedMail, profile, actions } = usePostOffice();
@@ -141,9 +160,6 @@ export function MailWorkspaceView({ folderId }) {
                 <Button variant="ghost" className="!p-2" onClick={() => actions.toggleStar(selectedMail.id)}>
                   <Star size={18} className={selectedMail.isStarred ? "text-[#009BF5] fill-current" : ""} />
                 </Button>
-                <Button variant="ghost" className="!p-2">
-                  <MoreVertical size={18} />
-                </Button>
               </div>
             </div>
 
@@ -160,12 +176,25 @@ export function MailWorkspaceView({ folderId }) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-slate-900">{selectedMail.sender}</span>
                         <span className="text-sm text-slate-500 break-all">&lt;{selectedMail.senderEmail}&gt;</span>
-                        <Badge color={selectedMail.role === "平台官方" ? "orange" : "slate"}>{selectedMail.role}</Badge>
+                        <Badge color={selectedMail.role === "邮件联系人" ? "slate" : "blue"}>{selectedMail.role}</Badge>
+                        {selectedMail.isOutgoing && deliveryStatusLabel(selectedMail.deliveryStatus) ? (
+                          <Badge color={selectedMail.deliveryStatus === "failed" ? "orange" : "green"}>
+                            {deliveryStatusLabel(selectedMail.deliveryStatus)}
+                          </Badge>
+                        ) : null}
                         {selectedMail.tags.map((tag) => (
                           <Badge key={tag} color="slate">{tag}</Badge>
                         ))}
                       </div>
                       <div className="text-sm text-slate-500 mt-1">{recipientLine}</div>
+                      {selectedMail.isOutgoing && (selectedMail.providerMessageId || selectedMail.acceptedAt || selectedMail.deliveryError) ? (
+                        <div className="mt-2 text-xs text-slate-400">
+                          {selectedMail.providerMessageId ? `服务商ID：${selectedMail.providerMessageId}` : null}
+                          {selectedMail.providerMessageId && selectedMail.acceptedAt ? " · " : null}
+                          {selectedMail.acceptedAt ? `受理时间：${new Date(selectedMail.acceptedAt).toLocaleString("zh-CN")}` : null}
+                          {selectedMail.deliveryError ? ` · ${selectedMail.deliveryError}` : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   <div className="text-sm text-slate-500 whitespace-nowrap">{selectedMail.dateTimeLabel}</div>
@@ -180,17 +209,33 @@ export function MailWorkspaceView({ folderId }) {
                       {selectedMail.attachments.length} 个附件
                     </h4>
                     <div className="flex gap-4 flex-wrap">
-                      {selectedMail.attachments.map((attachment) => (
-                        <div key={attachment.id} className="border border-slate-200 rounded-lg p-3 w-64 flex items-center gap-3 hover:bg-slate-50 cursor-pointer transition-colors">
-                          <div className="w-10 h-10 bg-red-100 text-red-600 rounded flex items-center justify-center">
-                            <FileText size={20} />
+                      {selectedMail.attachments.map((attachment) => {
+                        const downloadUrl = attachment.downloadUrl || (
+                          attachment.contentBase64
+                            ? `data:${attachment.contentType || "application/octet-stream"};base64,${attachment.contentBase64}`
+                            : ""
+                        );
+                        const content = (
+                          <>
+                            <div className="w-10 h-10 bg-red-100 text-red-600 rounded flex items-center justify-center">
+                              <FileText size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-slate-800 truncate">{attachment.name}</div>
+                              <div className="text-xs text-slate-500">{attachment.sizeLabel}</div>
+                            </div>
+                          </>
+                        );
+                        return downloadUrl ? (
+                          <a key={attachment.id} href={downloadUrl} download={attachment.name} className="border border-slate-200 rounded-lg p-3 w-64 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+                            {content}
+                          </a>
+                        ) : (
+                          <div key={attachment.id} className="border border-slate-200 rounded-lg p-3 w-64 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+                            {content}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-slate-800 truncate">{attachment.name}</div>
-                            <div className="text-xs text-slate-500">{attachment.sizeLabel}</div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ) : null}

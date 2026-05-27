@@ -1,11 +1,24 @@
 {
   "name": "infinitemail",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "InfiniteMail - Yuexiang ecosystem mail workspace",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5178 --strictPort",
-    "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4178 --strictPort"
+    "dev": "npm run dev:user",
+    "dev:api": "cd bff && HTTP_ADDR=:1666 go run ./cmd/bff",
+    "dev:user": "VITE_APP_SURFACE=user VITE_API_PROXY_TARGET=http://127.0.0.1:1666 VITE_USER_APP_ORIGIN=http://127.0.0.1:1788 VITE_ADMIN_APP_ORIGIN=http://127.0.0.1:1888 vite --host 0.0.0.0 --port 1788 --strictPort",
+    "dev:user:live": "VITE_APP_SURFACE=user VITE_API_PROXY_TARGET=http://127.0.0.1:1666 VITE_USER_APP_ORIGIN=http://127.0.0.1:1788 VITE_ADMIN_APP_ORIGIN=http://127.0.0.1:1888 vite --host 0.0.0.0 --port 1788 --strictPort",
+    "dev:admin": "VITE_APP_SURFACE=admin VITE_API_PROXY_TARGET=http://127.0.0.1:1666 VITE_USER_APP_ORIGIN=http://127.0.0.1:1788 VITE_ADMIN_APP_ORIGIN=http://127.0.0.1:1888 vite --host 0.0.0.0 --port 1888 --strictPort",
+    "dev:admin:live": "VITE_APP_SURFACE=admin VITE_API_PROXY_TARGET=http://127.0.0.1:1666 VITE_USER_APP_ORIGIN=http://127.0.0.1:1788 VITE_ADMIN_APP_ORIGIN=http://127.0.0.1:1888 vite --host 0.0.0.0 --port 1888 --strictPort",
+    "test": "npm run test:contracts && npm run test:bff",
+    "test:bff": "cd bff && go test ./...",
+    "test:contracts": "find packages/contracts/src -maxdepth 1 -name '*.test.mjs' -print | sort | xargs -n1 node",
+    "build": "npm run build:all",
+    "build:all": "npm run build:user && npm run build:admin",
+    "build:user": "VITE_APP_SURFACE=user vite build",
+    "build:admin": "VITE_APP_SURFACE=admin vite build --outDir dist-admin",
+    "commercial:check": "scripts/commercial-acceptance.sh",
+    "preview:user": "VITE_APP_SURFACE=user vite preview --host 0.0.0.0 --port 1788 --strictPort",
+    "preview:admin": "VITE_APP_SURFACE=admin vite preview --host 0.0.0.0 --port 1888 --strictPort"
   },
   "keywords": [],
   "author": "",
